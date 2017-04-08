@@ -2,7 +2,7 @@
 A set of miscellaneous shell scripts that doing miscellaneous tasks.
 
 ### IP Selector([ipselector](ipselector))
-    Let the user to determine which ip address to use for some purpose. The network card(virtual or physical ones) which is not up will be assigned an address of "0.0.0.0".
+Let the user to determine which ip address to use for some purpose. The network card(virtual or physical ones) which is not up will be assigned an address of "0.0.0.0".
 
 **Usage:**
 ```sh
