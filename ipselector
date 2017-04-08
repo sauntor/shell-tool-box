@@ -1,0 +1,147 @@
+#!/bin/sh
+name=`basename $0`
+_log=1
+_physical=1
+_active=1
+_msg="Please select one IP:"
+function usage() {
+    cat <<EOF
+Usage:
+    $name [-d|--debug] [-p|physical] [-a|--actived] [-m [prompt text]|--message[=prompt text]]
+    -d | --debug     enabling debug model
+    -p | --physical  only select physical network card
+    -a | --actived   only select actived(which is up and running) network card
+    -m | --message   the prompt text to shown when need user to select one ip
+Example:
+    $name -p -m "Please chose an IP for Tomcat:"
+EOF
+}
+
+
+TEMP_ARGS=$(getopt -o adpm:h --long debug,physical,actived,message:,help \
+     -n "$name" -- "$@")
+
+if [ $? != 0 ] ; then usage >&2 ; exit 1 ; fi
+
+eval set -- "$TEMP_ARGS"
+
+while true; do
+    case $1 in
+        -d|--debug)
+            _log=0; shift
+            ;;
+        -p|--physical)
+            _physical=0; shift
+            ;;
+        -a|--actived)
+            _active=0; shift
+            ;;
+        -m|--message)
+            _msg=$2; shift 2
+            ;;
+        --)
+            shift; break
+            ;;
+        -h|--help|*)
+            usage 1>&2; exit 1;
+            ;;
+    esac
+done
+
+function log_enabled() { return $_log; }
+function active() { return $_active; }
+function physical() { return $_physical; }
+
+physical_card_names=`ls /sys/class/net/ -l | \
+    sed -r '/.*\s+(.*)\s*->.*virtual.*/{d;n;}' | \
+    sed -rn 's/.*\s+([a-z0-9]+)\s.*/\1/p'`
+
+launched_card_names=`ip link | sed -nr 's/^[0-9]+:\s+([^\s]+):.*state\s+UP\s+mode.*/\1/p'`
+
+function log() {
+    log_enabled && echo $@ 1>&2
+}
+
+function is_in_array() {
+    local item=$1
+    while (( $# > 0 )); do
+        shift
+        if [[ $item == $1 ]]; then
+            return 0
+        fi
+    done
+    return -1
+}
+
+function physical_card_ips() {
+    local netcard=
+    local ipaddr=
+    local skip=1
+    local found=0
+    local IFS=$'\n'
+    for line in $(ip address); do
+        netcard=$(echo $line | sed -nr 's/^[0-9]+:\s+([^\s]+):.*/\1/p')
+        if [[ -n "$netcard" ]]; then
+            if (! active || (is_in_array $netcard ${launched_card_names[@]})) \
+                && (! physical || (is_in_array $netcard ${physical_card_names[@]})); then
+                if (( $found != 0 )); then
+                    echo "0.0.0.0"
+                fi
+                skip=0
+                printf '%-20s' $netcard
+                found=1
+            else
+                skip=1
+            fi
+            continue
+        fi
+        if (( $skip == 1 )); then
+            continue;
+        fi
+        ipaddr=`echo $line | sed -nr 's/.*inet\s+(([0-9]+.){3}.)\s*.*/\1/p'`
+        if [[ -n "$ipaddr" ]]; then
+            found=0
+            echo "$ipaddr"
+        fi
+    done
+    if (( $found != 0 )); then
+        echo "0.0.0.0"
+    fi
+}
+function select_ip() {
+    local IFS=$'\n'
+    local ips=(`physical_card_ips`)
+    local ips_size=${#ips[@]}
+    log_enabled && {
+        log -e "actived network cards:\n${launched_card_names[@]}\n"
+        log -e "physical network cards:\n${physical_card_names[@]}\n"
+        log -e "$ips_size cards are matched:"
+        for ip in ${ips[@]}; do
+            log $ip
+        done
+        log
+    }
+    case "$ips_size" in
+        0)
+            log "No network card is selected!"
+        ;;
+        1)
+            log "Just a single network card is matched, just use it!"
+            echo "$ips" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
+        ;;
+        *)
+            echo -e "$_msg" 1>&2
+            select card in ${ips[@]}; do
+                if [[ -n "$card" ]]; then
+                    echo "$card" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
+                    break
+                else
+                    echo -e "$_msg" 1>&2
+                fi
+            done
+        ;;
+    esac
+}
+
+select_ip
+
