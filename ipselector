@@ -1,4 +1,10 @@
 #!/bin/sh
+####################################################
+#     Author: Sauntor(适然) <sauntor@yeah.net>     #
+#     Version: 1.0                                 #
+#     License: Apache 2.0                          #
+####################################################
+
 name=`basename $0`
 _log=1
 _physical=1
