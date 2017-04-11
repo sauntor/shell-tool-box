@@ -25,7 +25,7 @@ EOF
 }
 
 
-TEMP_ARGS=$(getopt -o adpm:h --long debug,physical,actived,message:,help \
+TEMP_ARGS=$(getopt -o adpm:hs --long debug,physical,actived,message:,help,silent \
      -n "$name" -- "$@")
 
 if [ $? != 0 ] ; then usage >&2 ; exit 1 ; fi
@@ -46,6 +46,9 @@ while true; do
         -m|--message)
             _msg=$2; shift 2
             ;;
+        -s|--silent)
+            _silent=0; shift
+            ;;
         --)
             shift; break
             ;;
@@ -58,6 +61,7 @@ done
 function log_enabled() { return $_log; }
 function active() { return $_active; }
 function physical() { return $_physical; }
+function silent() { return $_silent; }
 
 physical_card_names=`ls /sys/class/net/ -l | \
     sed -r '/.*\s+(.*)\s*->.*virtual.*/{d;n;}' | \
@@ -137,15 +141,20 @@ function select_ip() {
             echo "$ips" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
         ;;
         *)
-            echo -e "$_msg" 1>&2
-            select card in ${ips[@]}; do
-                if [[ -n "$card" ]]; then
-                    echo "$card" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
-                    break
-                else
-                    echo -e "$_msg" 1>&2
-                fi
-            done
+            if ! silent; then
+                echo -e "$_msg" 1>&2
+                select card in ${ips[@]}; do
+                    if [[ -n "$card" ]]; then
+                        echo "$card" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
+                        break
+                    else
+                        echo -e "$_msg" 1>&2
+                    fi
+                done
+            else
+                log "Just select the first network card's ip address, because we are in silent model!"
+                echo "$ips" | sed -nr 's/^[^\s]+\s+([^\s]+)/\1/p'
+            fi
         ;;
     esac
 }
